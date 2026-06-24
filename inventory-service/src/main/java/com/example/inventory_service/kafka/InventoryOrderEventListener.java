@@ -7,6 +7,7 @@ import com.example.inventory_service.service.InventoryService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
@@ -21,7 +22,7 @@ public class InventoryOrderEventListener {
     private final InventoryService inventoryService;
     private final InventoryNotificationEventPublisher inventoryNotificationEventPublisher;
 
-    @org.springframework.kafka.annotation.KafkaListener(topics = InventoryTopicConstant.ORDER_CREATED, groupId = "inventory-service")
+    @KafkaListener(topics = NotificationTopicConstant.ORDER_CREATED, groupId = "inventory-service")
     public void listenToOrderCreatedEvent(String message) {
         LOG.info("Received order-created inventory event: {}", message);
         try {

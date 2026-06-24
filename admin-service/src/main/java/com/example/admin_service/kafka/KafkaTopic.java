@@ -12,4 +12,9 @@ public class KafkaTopic {
     public NewTopic adminNotificationTopic() {
         return TopicBuilder.name(KafkaConstant.ADMIN_NOTIFICATION_TOPIC).build();
     }
+
+    @Bean
+    public NewTopic failedServiceLogTopic() {
+        return TopicBuilder.name(KafkaConstant.FAILED_SERVICE_LOG_TOPIC).build();
+    }
 }

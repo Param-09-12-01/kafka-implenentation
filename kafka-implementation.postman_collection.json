@@ -1,0 +1,320 @@
+{
+  "info": {
+    "name": "Kafka Implementation - End To End Test APIs",
+    "description": "Postman collection to test order, inventory, admin, notification Kafka flows and failed-service log scenarios.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "orderBaseUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "inventoryBaseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "adminBaseUrl",
+      "value": "http://localhost:8083"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - Setup Data",
+      "item": [
+        {
+          "name": "Create Inventory Stock - Mobile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productName\": \"Mobile\",\n  \"quantity\": 10,\n  \"price\": 10000\n}"
+            },
+            "url": {
+              "raw": "{{inventoryBaseUrl}}/api/inventory",
+              "host": [
+                "{{inventoryBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "inventory"
+              ]
+            },
+            "description": "Creates inventory stock used by the order success scenario."
+          }
+        },
+        {
+          "name": "Create User - Rahul",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Rahul\",\n  \"email\": \"rahul@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{orderBaseUrl}}/api/users",
+              "host": [
+                "{{orderBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ]
+            },
+            "description": "Creates a user for order creation. If this is the first user, id should be 1."
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Order To Inventory Kafka Flow",
+      "item": [
+        {
+          "name": "Create Order - Inventory Reserve Success",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productName\": \"Mobile\",\n  \"amount\": 10000,\n  \"quantity\": 2,\n  \"user\": {\n    \"id\": 1\n  }\n}"
+            },
+            "url": {
+              "raw": "{{orderBaseUrl}}/api/orders",
+              "host": [
+                "{{orderBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders"
+              ]
+            },
+            "description": "Sends inventory_order_created event. Inventory service should reserve stock and notification service should create EMAIL and SMS notifications."
+          }
+        },
+        {
+          "name": "Create Order - Inventory Reserve Failure",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productName\": \"Mobile\",\n  \"amount\": 10000,\n  \"quantity\": 99999,\n  \"user\": {\n    \"id\": 1\n  }\n}"
+            },
+            "url": {
+              "raw": "{{orderBaseUrl}}/api/orders",
+              "host": [
+                "{{orderBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders"
+              ]
+            },
+            "description": "Sends inventory_order_created event with quantity greater than stock. Inventory service should send failure notification."
+          }
+        },
+        {
+          "name": "Create Order - Missing Product Failure",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productName\": \"UnknownProduct\",\n  \"amount\": 500,\n  \"quantity\": 1,\n  \"user\": {\n    \"id\": 1\n  }\n}"
+            },
+            "url": {
+              "raw": "{{orderBaseUrl}}/api/orders",
+              "host": [
+                "{{orderBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders"
+              ]
+            },
+            "description": "Sends inventory_order_created event for a product that does not exist. Inventory service should send failure notification."
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Admin Notification Kafka Flow",
+      "item": [
+        {
+          "name": "Send Admin Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "\"Test admin notification\""
+            },
+            "url": {
+              "raw": "{{adminBaseUrl}}/api/admin/notifications",
+              "host": [
+                "{{adminBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "notifications"
+              ]
+            },
+            "description": "Sends admin notification event to notification service."
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Failed Service Log Scenarios",
+      "item": [
+        {
+          "name": "Order Service - Order Not Found",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{orderBaseUrl}}/api/orders/9999",
+              "host": [
+                "{{orderBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "9999"
+              ]
+            },
+            "description": "Triggers order-service exception handler and publishes failed_svc_log event with svcName order-service."
+          }
+        },
+        {
+          "name": "Order Service - User Not Found",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{orderBaseUrl}}/api/users/9999",
+              "host": [
+                "{{orderBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "9999"
+              ]
+            },
+            "description": "Triggers order-service exception handler and publishes failed_svc_log event with svcName order-service."
+          }
+        },
+        {
+          "name": "Inventory Service - Known Exception",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{inventoryBaseUrl}}/api/inventory/knownException",
+              "host": [
+                "{{inventoryBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "inventory",
+                "knownException"
+              ]
+            },
+            "description": "Triggers inventory-service known exception and publishes failed_svc_log event with svcName inventory-service."
+          }
+        },
+        {
+          "name": "Inventory Service - Unknown Exception",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{inventoryBaseUrl}}/api/inventory/unknownException",
+              "host": [
+                "{{inventoryBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "inventory",
+                "unknownException"
+              ]
+            },
+            "description": "Triggers inventory-service random exception and publishes failed_svc_log event with svcName inventory-service."
+          }
+        },
+        {
+          "name": "Admin Service - Known Exception",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{adminBaseUrl}}/api/admin/knownException",
+              "host": [
+                "{{adminBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "knownException"
+              ]
+            },
+            "description": "Triggers admin-service known exception and publishes failed_svc_log event with svcName admin-service."
+          }
+        },
+        {
+          "name": "Admin Service - Unknown Exception",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{adminBaseUrl}}/api/admin/unknownException",
+              "host": [
+                "{{adminBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "unknownException"
+              ]
+            },
+            "description": "Triggers admin-service random exception and publishes failed_svc_log event with svcName admin-service."
+          }
+        }
+      ]
+    }
+  ]
+}

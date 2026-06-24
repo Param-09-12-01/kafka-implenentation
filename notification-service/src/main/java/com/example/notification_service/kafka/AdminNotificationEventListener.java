@@ -22,15 +22,16 @@ public class AdminNotificationEventListener {
      * send only one channel, change the Kafka message to JSON and add a notification type field, or
      * split admin notifications into separate email and SMS topics.
      */
-    @KafkaListener(topics = NotificationTopicConstant.ADMIN_SVC_NOTIFICATION, groupId = NotificationTopicConstant.ADMIN_SVC_NOTIFICATION_EMAIL_GROUP_ID)
+    @KafkaListener(topics = NotificationTopicConstant.ADMIN_SERVICE_NOTIFICATION, groupId = NotificationTopicConstant.ADMIN_SERVICE_NOTIFICATION_EMAIL_GROUP_ID)
     public void consumeAdminNotificationForEmailGroup(String message) {
         LOG.info("Received admin notification for EMAIL group. messageLength: {}", message.length());
         notificationService.sendAdminEmailNotification(message);
     }
 
-    @KafkaListener(topics = NotificationTopicConstant.ADMIN_SVC_NOTIFICATION, groupId = NotificationTopicConstant.ADMIN_SVC_NOTIFICATION_SMS_GROUP_ID)
+    @KafkaListener(topics = NotificationTopicConstant.ADMIN_SERVICE_NOTIFICATION, groupId = NotificationTopicConstant.ADMIN_SERVICE_NOTIFICATION_SMS_GROUP_ID)
     public void consumeAdminNotificationForSmsGroup(String message) {
         LOG.info("Received admin notification for SMS group. messageLength: {}", message.length());
         notificationService.sendAdminSmsNotification(message);
     }
 }
+

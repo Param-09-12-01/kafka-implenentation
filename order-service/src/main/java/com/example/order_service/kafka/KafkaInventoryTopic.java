@@ -9,7 +9,12 @@ import org.springframework.kafka.config.TopicBuilder;
 public class KafkaInventoryTopic {
 
     @Bean
-    public NewTopic toInventoryService() {
+    public NewTopic orderCreatedTopic() {
         return TopicBuilder.name(InventoryTopicConstant.ORDER_CREATED).build();
+    }
+
+    @Bean
+    public NewTopic failedServiceLogTopic() {
+        return TopicBuilder.name(InventoryTopicConstant.FAILED_SERVICE_LOG_TOPIC).build();
     }
 }

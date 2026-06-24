@@ -21,7 +21,8 @@ public class UserService {
     }
 
     public User getUserById(Long id) {
-        return userRepository.findById(id).orElse(null);
+        return userRepository.findById(id)
+                .orElseThrow(() -> new java.util.NoSuchElementException("User not found with id: " + id));
     }
 
     public User saveUser(User user) {
@@ -29,6 +30,9 @@ public class UserService {
     }
 
     public void deleteUser(Long id) {
+        if (!userRepository.existsById(id)) {
+            throw new java.util.NoSuchElementException("User not found with id: " + id);
+        }
         userRepository.deleteById(id);
     }
 }

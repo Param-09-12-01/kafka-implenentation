@@ -16,7 +16,7 @@ Keep this document focused on order-service only. Cross-service behavior may be 
 - HTTP port: `8081`
 - Database: MySQL database `order_service`
 - Persistence: Spring Data JPA with Flyway migrations
-- Kafka role: Producer for inventory-related order events
+- Kafka role: Producer for inventory-related order events and failed-service log events
 
 ## Main Responsibilities
 
@@ -24,22 +24,26 @@ Keep this document focused on order-service only. Cross-service behavior may be 
 - Manage orders through REST endpoints.
 - Persist orders and users in the order service database.
 - Publish an inventory event to Kafka after an order is created.
+- Publish failed-service log events to Kafka when REST exceptions are handled.
 - Provide a configured RestTemplate client for inventory-service, although the current order creation path publishes Kafka events instead of doing a synchronous stock check.
 
 ## Important Source Areas
 
 - `src/main/java/com/example/order_service/controller/OrderController.java`: order REST API.
 - `src/main/java/com/example/order_service/controller/UserController.java`: user REST API.
+- `src/main/java/com/example/order_service/exception/ApiError.java`: common API error response body.
+- `src/main/java/com/example/order_service/exception/GlobalExceptionHandler.java`: centralized REST exception handling for this service.
 - `src/main/java/com/example/order_service/service/OrderService.java`: order business logic and Kafka event publishing.
 - `src/main/java/com/example/order_service/service/UserService.java`: user business logic.
 - `src/main/java/com/example/order_service/service/InventoryService.java`: REST client wrapper for inventory-service.
 - `src/main/java/com/example/order_service/model/Order.java`: order JPA entity.
 - `src/main/java/com/example/order_service/model/User.java`: user JPA entity.
 - `src/main/java/com/example/order_service/kafka/KafkaConfig.java`: Kafka admin configuration.
-- `src/main/java/com/example/order_service/kafka/KafkaProducerConfig.java`: Kafka producer and template config.
+- `src/main/java/com/example/order_service/kafka/KafkaProducerConfig.java`: Kafka producer and template config for inventory and failed-service log events.
 - `src/main/java/com/example/order_service/kafka/KafkaInventoryMessageSender.java`: sends inventory events.
-- `src/main/java/com/example/order_service/kafka/KafkaInventoryTopic.java`: Kafka topic bean for order-created inventory events.
-- `src/main/java/com/example/order_service/kafka/InventoryTopicConstant.java`: inventory topic constants.
+- `src/main/java/com/example/order_service/kafka/KafkaFailedServiceLogSender.java`: sends failed-service log events.
+- `src/main/java/com/example/order_service/kafka/KafkaInventoryTopic.java`: Kafka topic beans for order-created inventory and failed-service log events.
+- `src/main/java/com/example/order_service/kafka/InventoryTopicConstant.java`: Kafka topic constants.
 - `src/main/resources/application.properties`: service, database, Flyway, Kafka, and inventory-service configuration.
 - `src/main/resources/db/migration`: Flyway migrations for order-service database schema.
 
@@ -48,14 +52,14 @@ Keep this document focused on order-service only. Cross-service behavior may be 
 Base path: `/api/orders`
 
 - `GET /api/orders`: returns all orders.
-- `GET /api/orders/{id}`: returns one order by id, or `null` if not found.
+- `GET /api/orders/{id}`: returns one order by id, or a centralized `404` error response if not found.
 - `POST /api/orders`: creates an order, saves it, and publishes an inventory event.
 - `DELETE /api/orders/{id}`: deletes an order by id.
 
 Base path: `/api/users`
 
 - `GET /api/users`: returns all users.
-- `GET /api/users/{id}`: returns one user by id, or `null` if not found.
+- `GET /api/users/{id}`: returns one user by id, or a centralized `404` error response if not found.
 - `POST /api/users`: creates a user.
 - `DELETE /api/users/{id}`: deletes a user by id.
 
@@ -99,9 +103,10 @@ Kafka bootstrap server:
 
 - `spring.kafka.bootstrap-servers=localhost:9092`
 
-Produced topic:
+Produced topics:
 
 - `inventory_order_created`
+- `failed_svc_log`
 
 Topic constant:
 
@@ -141,12 +146,22 @@ The `InventoryService` wrapper uses the configured `inventoryRestTemplate` and c
 
 Note: the current inventory-service controller only exposes `POST /api/inventory`, so verify this contract before using the REST client path.
 
+## Exception Handling
+
+- REST exceptions are handled in one place by `GlobalExceptionHandler`.
+- `ApiError` is the common error response shape with timestamp, HTTP status, error, message, and path.
+- `IllegalArgumentException` returns `400 BAD_REQUEST`.
+- `NoSuchElementException` returns `404 NOT_FOUND`.
+- `DataIntegrityViolationException` returns `409 CONFLICT`.
+- Any other unhandled exception returns `500 INTERNAL_SERVER_ERROR` and is logged.
+- Handled REST exceptions publish a `FailedSvcLogEvent` to topic `failed_svc_log` with `svcName=order-service`, the failure reason, and the failure time.
+
 ## Current Behavior Notes
 
 - Order creation saves the order before inventory availability is confirmed.
 - The order service does not currently wait for inventory-service confirmation.
 - The current flow is asynchronous and event-driven after the order is persisted.
-- The order service creates the Kafka topic bean for `inventory_order_created`.
+- The order service creates Kafka topic beans for `inventory_order_created` and `failed_svc_log`.
 - All order-service Kafka classes are directly under `com.example.order_service.kafka`; do not add nested Kafka subpackages unless this context is updated.
 - If changing Kafka topic names, payload fields, or serialization, update this file and coordinate with inventory-service.
 

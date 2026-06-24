@@ -16,7 +16,7 @@ Keep this document focused on inventory-service only. Cross-service behavior may
 - HTTP port: `8080`
 - Database: MySQL database `inventory_service`
 - Persistence: Spring Data JPA with Flyway migrations
-- Kafka role: Consumer for order-created inventory events and producer for inventory notification events
+- Kafka role: Consumer for order-created inventory events and producer for inventory notification and failed-service log events
 
 ## Main Responsibilities
 
@@ -25,10 +25,13 @@ Keep this document focused on inventory-service only. Cross-service behavior may
 - Consume order-created events from Kafka.
 - Deduct stock when enough inventory is available for an ordered product.
 - Publish inventory reservation success/failure notification events to Kafka.
+- Publish failed-service log events to Kafka when REST exceptions are handled.
 
 ## Important Source Areas
 
 - `src/main/java/com/example/inventory_service/controller/InventoryController.java`: inventory REST API.
+- `src/main/java/com/example/inventory_service/exception/ApiError.java`: common API error response body.
+- `src/main/java/com/example/inventory_service/exception/GlobalExceptionHandler.java`: centralized REST exception handling for this service.
 - `src/main/java/com/example/inventory_service/service/InventoryService.java`: inventory business logic and stock reservation.
 - `src/main/java/com/example/inventory_service/model/Inventory.java`: inventory JPA entity.
 - `src/main/java/com/example/inventory_service/repository/InventoryRepository.java`: inventory database access and stock-check query.
@@ -37,11 +40,11 @@ Keep this document focused on inventory-service only. Cross-service behavior may
 - `src/main/java/com/example/inventory_service/dto/InventoryReservationStatus.java`: reservation result enum with `SUCCESS` and `FAILURE`.
 - `src/main/java/com/example/inventory_service/dto/NotificationType.java`: notification type enum with `EMAIL` and `SMS`.
 - `src/main/java/com/example/inventory_service/kafka/KafkaConsumerConfig.java`: Kafka consumer factory configuration.
-- `src/main/java/com/example/inventory_service/kafka/KafkaProducerConfig.java`: Kafka producer configuration for notification events.
+- `src/main/java/com/example/inventory_service/kafka/KafkaProducerConfig.java`: Kafka producer configuration for notification and failed-service log events.
 - `src/main/java/com/example/inventory_service/kafka/InventoryOrderEventListener.java`: order-created Kafka listener and reservation handler.
 - `src/main/java/com/example/inventory_service/kafka/InventoryNotificationEventPublisher.java`: publisher for reservation notification events.
-- `src/main/java/com/example/inventory_service/kafka/InventoryTopicConstant.java`: order-created topic constant.
-- `src/main/java/com/example/inventory_service/kafka/NotificationTopicConstant.java`: notification topic constant.
+- `src/main/java/com/example/inventory_service/kafka/KafkaFailedServiceLogSender.java`: publisher for failed-service log events.
+- `src/main/java/com/example/inventory_service/kafka/NotificationTopicConstant.java`: Kafka topic constants for order-created, notification, and failed-service log topics.
 - `src/main/resources/application.properties`: service, database, Flyway, and Kafka configuration.
 - `src/main/resources/db/migration`: Flyway migrations for inventory-service database schema.
 
@@ -106,9 +109,10 @@ Consumed event payload:
 }
 ```
 
-Published topic:
+Published topics:
 
 - `inventory_notification`
+- `failed_svc_log`
 
 Published event payload:
 
@@ -151,10 +155,21 @@ Current behavior:
 - Publishes a success or failure notification event after handling each valid order-created event.
 - Does not currently notify order-service whether stock is available.
 
+## Exception Handling
+
+- REST exceptions are handled in one place by `GlobalExceptionHandler`.
+- `ApiError` is the common error response shape with timestamp, HTTP status, error, message, and path.
+- `IllegalArgumentException` returns `400 BAD_REQUEST`.
+- `NoSuchElementException` returns `404 NOT_FOUND`.
+- `DataIntegrityViolationException` returns `409 CONFLICT`.
+- Any other unhandled exception returns `500 INTERNAL_SERVER_ERROR` and is logged.
+- Handled REST exceptions publish a `FailedSvcLogEvent` to topic `failed_svc_log` with `svcName=inventory-service`, the failure reason, and the failure time.
+
 ## Current Behavior Notes
 
 - Inventory records can be created with `POST /api/inventory`.
-- Kafka consumption and notification publishing are asynchronous.
+- Inventory save, delete, stock reservation, and handled exception paths include structured logs.
+- Kafka consumption, notification publishing, and failed-service log publishing are asynchronous.
 - Default notification events omit `notificationType`, so notification-service sends both email and SMS.
 - If changing topic names, payload fields, consumer group, or serialization, update this file and coordinate with order-service and notification-service.
 

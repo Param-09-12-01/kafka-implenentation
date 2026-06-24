@@ -7,6 +7,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.lang.reflect.Constructor;
+import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
+
 @Service
 @RequiredArgsConstructor
 public class AdminNotificationService {
@@ -25,5 +29,23 @@ public class AdminNotificationService {
         kafkaAdminNotificationSender.sendMessage(trimmedMessage);
         LOG.info("Admin notification publish request accepted. messageLength: {}", trimmedMessage.length());
         return "Admin notification published successfully";
+    }
+
+    public void throwRandomTestException() throws Exception {
+        List<Class<? extends Exception>> exceptions = List.of(
+                IllegalArgumentException.class,
+                IllegalStateException.class,
+                NullPointerException.class,
+                UnsupportedOperationException.class,
+                RuntimeException.class,
+                ArithmeticException.class,
+                IndexOutOfBoundsException.class,
+                ClassCastException.class
+        );
+
+        Class<? extends Exception> randomClass = exceptions.get(ThreadLocalRandom.current().nextInt(exceptions.size()));
+        LOG.warn("Throwing random admin test exception. exceptionType: {}", randomClass.getSimpleName());
+        Constructor<? extends Exception> constructor = randomClass.getConstructor(String.class);
+        throw constructor.newInstance("Random exception from " + randomClass.getSimpleName());
     }
 }

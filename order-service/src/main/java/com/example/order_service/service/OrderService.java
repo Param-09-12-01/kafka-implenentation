@@ -22,7 +22,8 @@ public class OrderService {
     }
 
     public Order getOrderById(Long id) {
-        return orderRepository.findById(id).orElse(null);
+        return orderRepository.findById(id)
+                .orElseThrow(() -> new java.util.NoSuchElementException("Order not found with id: " + id));
     }
 
     public Order saveOrder(Order order) {
@@ -39,6 +40,9 @@ public class OrderService {
     }
 
     public void deleteOrder(Long id) {
+        if (!orderRepository.existsById(id)) {
+            throw new java.util.NoSuchElementException("Order not found with id: " + id);
+        }
         orderRepository.deleteById(id);
     }
 }

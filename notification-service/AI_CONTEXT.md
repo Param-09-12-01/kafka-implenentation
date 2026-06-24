@@ -15,7 +15,7 @@ Keep this document focused on notification-service only. Cross-service behavior 
 - Main app class: `com.example.notification_service.NotificationServiceApplication`
 - HTTP port: `8082`
 - Database: MySQL database `notification_service`
-- Kafka role: Consumer for inventory notification events and admin notification messages
+- Kafka role: Consumer for inventory notification events, admin notification messages, and failed-service log events
 
 ## Main Responsibilities
 
@@ -26,21 +26,27 @@ Keep this document focused on notification-service only. Cross-service behavior 
 - Format and handle email notification events with a dummy logger implementation.
 - Format and handle SMS notification events with a dummy logger implementation.
 - Persist every supported success/failure inventory notification event in `notification_records`.
+- Consume failed-service log events and persist them in `failed_svc_log`.
 
 ## Important Source Areas
 
+- `src/main/java/com/example/notification_service/dto/FailedSvcLogEvent.java`: Kafka event DTO consumed for failed-service logs.
 - `src/main/java/com/example/notification_service/dto/InventoryNotificationEvent.java`: Kafka event DTO consumed from inventory-service.
 - `src/main/java/com/example/notification_service/dto/InventoryReservationStatus.java`: reservation result enum with `SUCCESS` and `FAILURE`.
 - `src/main/java/com/example/notification_service/dto/NotificationType.java`: notification type enum with `EMAIL` and `SMS`.
 - `src/main/java/com/example/notification_service/kafka/AdminNotificationEventListener.java`: Kafka listener for raw admin-service messages.
+- `src/main/java/com/example/notification_service/kafka/FailedSvcLogEventListener.java`: Kafka listener for failed-service log events.
 - `src/main/java/com/example/notification_service/kafka/KafkaConsumerConfig.java`: Kafka consumer factory configuration.
-- `src/main/java/com/example/notification_service/kafka/KafkaTopicConfig.java`: Kafka topic creation configuration for `inventory_notification`.
 - `src/main/java/com/example/notification_service/kafka/InventoryNotificationEventListener.java`: Kafka topic listener and event handler.
 - `src/main/java/com/example/notification_service/kafka/NotificationTopicConstant.java`: notification topic and group constants.
+- `src/main/java/com/example/notification_service/model/FailedServiceLog.java`: JPA entity for persisted failed-service logs.
 - `src/main/java/com/example/notification_service/model/NotificationRecord.java`: JPA entity for persisted notification history.
+- `src/main/java/com/example/notification_service/repository/FailedServiceLogRepository.java`: Spring Data JPA repository for failed-service logs.
 - `src/main/java/com/example/notification_service/repository/NotificationRepository.java`: Spring Data JPA repository for notification records.
+- `src/main/java/com/example/notification_service/service/FailedServiceLogService.java`: failed-service log persistence and logging.
 - `src/main/java/com/example/notification_service/service/NotificationService.java`: notification routing, persistence, and email/SMS handling.
 - `src/main/resources/db/migration/V1__create_notification_records_table.sql`: Flyway migration for notification history table.
+- `src/main/resources/db/migration/V2__create_failed_svc_log_table.sql`: Flyway migration for failed-service log table.
 - `src/main/resources/application.properties`: local service, database, Flyway, and Kafka configuration.
 - `src/main/resources/application-template.properties`: git-safe template configuration.
 
@@ -54,16 +60,14 @@ Consumed topics:
 
 - `inventory_notification`
 - `admin_notification`
-
-Topic provisioning:
-
-- `KafkaTopicConfig.inventoryNotificationTopic()` declares the topic with 1 partition and 1 replica so Spring Kafka can create it through Kafka admin when the broker allows topic creation.
+- `failed_svc_log`
 
 Consumer groups:
 
 - `notification-service` for inventory notification events.
 - `email_group` for admin EMAIL handling.
 - `sms_group` for admin SMS handling.
+- `all-service` for failed-service log events.
 
 Consumed event payload:
 
@@ -108,6 +112,25 @@ Admin notification flow:
 4. Because admin messages are raw strings, notification-service cannot choose only EMAIL or only SMS from the payload today.
 5. If admin-service needs one-channel routing, change the admin Kafka payload to JSON with a notification type field, or split admin notifications into separate email and SMS topics.
 
+Failed-service log flow:
+
+1. Any service can publish failed-service log JSON to topic `failed_svc_log`.
+2. `FailedSvcLogEventListener.consumeFailedServiceLogEvent()` receives the deserialized `FailedSvcLogEvent` and logs service name, failed time, and reason length.
+3. Kafka deserializes the JSON message into `FailedSvcLogEvent` through the failed-service-log listener container factory.
+4. Processing failures are logged with service name and failed time, then rethrown so the listener container can handle the failure.
+5. `FailedServiceLogService.saveFailedServiceLog()` logs the save attempt and persists the row.
+6. Successful persistence logs the saved failed-service log id, service name, and failed time.
+
+Failed-service log payload:
+
+```json
+{
+  "failedReason": "Database connection failed",
+  "failedTime": "2026-06-24T13:30:00",
+  "svcName": "order-service"
+}
+```
+
 ## Database Context
 
 Database name:
@@ -117,6 +140,11 @@ Database name:
 Flyway history table:
 
 - `flyway_notification_history`
+
+Flyway migrations:
+
+- `V1__create_notification_records_table.sql`: creates `notification_records`.
+- `V2__create_failed_svc_log_table.sql`: creates `failed_svc_log`.
 
 Notification table:
 
@@ -133,11 +161,24 @@ Notification table columns:
 - `notification_body`: formatted email/SMS body generated by notification-service.
 - `created_at`: persistence timestamp set before insert.
 
+Failed-service log table:
+
+- `failed_svc_log`
+
+Failed-service log table columns:
+
+- `id`: generated primary key.
+- `svc_name`: service where the failure happened.
+- `failed_reason`: failure reason sent by the source service.
+- `failed_time`: time sent by the source service and stored as a database date-time value.
+- `created_at`: persistence timestamp set by Hibernate.
+
 ## Current Behavior Notes
 
 - The service persists supported inventory `EMAIL` and `SMS` notification records before logging the dummy send action.
 - A missing or null inventory `notificationType` creates two persisted rows: one `EMAIL` row and one `SMS` row.
 - Admin notifications are logged through dummy EMAIL and SMS handlers and are not persisted in `notification_records` currently.
+- Failed-service log events are persisted in `failed_svc_log` and include structured logs for receive, save, success, and failure paths.
 - The service does not currently call external email or SMS providers.
 - `EMAIL` and `SMS` notification types both have dummy formatting and logging handlers.
 - If changing the topic name, payload fields, consumer group, serialization, table schema, or persistence behavior, update this file and coordinate with inventory-service/admin-service where needed.
