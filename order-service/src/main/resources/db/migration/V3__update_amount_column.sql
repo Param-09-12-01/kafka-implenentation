@@ -1,0 +1,2 @@
+ALTER TABLE orders
+    MODIFY COLUMN amount DOUBLE NOT NULL;

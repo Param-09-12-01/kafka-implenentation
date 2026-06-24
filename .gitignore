@@ -1,0 +1,13 @@
+# Ignore local Spring Boot runtime configuration. Use application-template.properties as the git-safe example.
+**/src/main/resources/application.properties
+
+# Build output
+target/
+**/target/
+
+# IDE and OS files
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
