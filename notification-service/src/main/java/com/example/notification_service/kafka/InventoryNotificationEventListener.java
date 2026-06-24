@@ -5,6 +5,7 @@ import com.example.notification_service.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
@@ -18,7 +19,8 @@ public class InventoryNotificationEventListener {
     private final ObjectMapper objectMapper;
     private final NotificationService notificationService;
 
-    @org.springframework.kafka.annotation.KafkaListener(topics = NotificationTopicConstant.INVENTORY_NOTIFICATION, groupId = "notification-service")
+    @KafkaListener(topics = NotificationTopicConstant.INVENTORY_NOTIFICATION,
+            groupId = NotificationTopicConstant.INVENTORY_NOTIFICATION_TOPIC_GROUP_ID)
     public void listenToInventoryNotificationEvent(String message) {
         LOG.info("Received inventory notification event: {}", message);
         try {
