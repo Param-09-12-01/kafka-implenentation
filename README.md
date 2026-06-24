@@ -1,6 +1,6 @@
 # Kafka Implementation Microservices
 
-This repository contains three Spring Boot microservices that communicate with Kafka and use MySQL for persistence where needed.
+This repository contains four Spring Boot microservices that communicate with Kafka and use MySQL for persistence where needed.
 
 ## Services
 
@@ -8,7 +8,8 @@ This repository contains three Spring Boot microservices that communicate with K
 | --- | --- | --- | --- |
 | order-service | 8081 | order_service | Creates orders and publishes order-created inventory events. |
 | inventory-service | 8080 | inventory_service | Stores stock, consumes order-created events, reserves inventory, and publishes notification events. |
-| notification-service | 8082 | notification_service | Consumes inventory notification events, formats email/SMS notifications, and stores notification history. |
+| notification-service | 8082 | notification_service | Consumes inventory/admin notification events, formats email/SMS notifications, and stores inventory notification history. |
+| admin-service | 8083 | none | Exposes admin notification API and publishes admin messages to Kafka. |
 
 No port collision is present in the current service configuration.
 
@@ -18,6 +19,7 @@ No port collision is present in the current service configuration.
 | --- | --- | --- | --- |
 | inventory_order_created | order-service | inventory-service | Product name and requested quantity. |
 | inventory_notification | inventory-service | notification-service | Product, quantity, reservation status, optional notification type, and message. |
+| admin_notification | admin-service | notification-service | Raw admin notification text. |
 
 ## Local Setup
 
@@ -30,8 +32,19 @@ No port collision is present in the current service configuration.
    - order-service/src/main/resources/application-template.properties -> order-service/src/main/resources/application.properties
    - inventory-service/src/main/resources/application-template.properties -> inventory-service/src/main/resources/application.properties
    - notification-service/src/main/resources/application-template.properties -> notification-service/src/main/resources/application.properties
-4. Update local database usernames/passwords in each application.properties file.
+   - admin-service/src/main/resources/application-template.properties -> admin-service/src/main/resources/application.properties
+4. Update local database usernames/passwords in each database-backed application.properties file.
 5. Run each service from its own folder with mvnw.cmd spring-boot:run.
+
+## Admin Notification API
+
+Admin-service exposes:
+
+```http
+POST /api/admin/notifications
+```
+
+Request body is raw text. Admin-service publishes that text to the `admin_notification` Kafka topic. Notification-service currently consumes the same admin topic with separate EMAIL and SMS consumer groups, so each admin message is handled for both channels.
 
 ## Git Safety
 

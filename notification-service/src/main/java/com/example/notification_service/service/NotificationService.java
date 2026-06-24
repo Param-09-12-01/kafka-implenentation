@@ -19,6 +19,7 @@ public class NotificationService {
 
     public void sendNotification(InventoryNotificationEvent event) {
         if (event.getNotificationType() == null) {
+            LOG.info("Notification type missing for productName: {}. Sending EMAIL and SMS.", event.getProductName());
             sendEmailNotification(event);
             sendSmsNotification(event);
             return;
@@ -39,6 +40,14 @@ public class NotificationService {
                 event.getProductName());
     }
 
+    public void sendAdminEmailNotification(String message) {
+        LOG.info("Sending admin email notification. body: {}", createAdminEmailBody(message));
+    }
+
+    public void sendAdminSmsNotification(String message) {
+        LOG.info("Sending admin SMS notification. body: {}", createAdminSmsBody(message));
+    }
+
     private void saveNotificationRecord(InventoryNotificationEvent event, NotificationType notificationType, String notificationBody) {
         NotificationRecord notificationRecord = NotificationRecord.builder()
                 .productName(event.getProductName())
@@ -49,7 +58,11 @@ public class NotificationService {
                 .notificationBody(notificationBody)
                 .build();
 
-        notificationRepository.save(notificationRecord);
+        NotificationRecord savedRecord = notificationRepository.save(notificationRecord);
+        LOG.info("Saved {} notification record. id: {}, productName: {}",
+                notificationType,
+                savedRecord.getId(),
+                savedRecord.getProductName());
     }
 
     private void sendEmailNotification(InventoryNotificationEvent event) {
@@ -75,5 +88,13 @@ public class NotificationService {
         return "Inventory " + event.getReservationStatus()
                 + " for " + event.getProductName()
                 + " (qty: " + event.getRequestedQuantity() + ")";
+    }
+
+    private String createAdminEmailBody(String message) {
+        return "Admin update: " + message;
+    }
+
+    private String createAdminSmsBody(String message) {
+        return "Admin update: " + message;
     }
 }
