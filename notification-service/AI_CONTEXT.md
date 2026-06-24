@@ -15,12 +15,14 @@ Keep this document focused on notification-service only. Cross-service behavior 
 - Main app class: `com.example.notification_service.NotificationServiceApplication`
 - HTTP port: `8082`
 - Database: MySQL database `notification_service`
-- Kafka role: Consumer for inventory notification events
+- Kafka role: Consumer for inventory notification events and admin notification messages
 
 ## Main Responsibilities
 
 - Consume inventory reservation success/failure notification events from Kafka.
-- Route notification events by notification type.
+- Consume raw admin notification messages from Kafka.
+- Route inventory notification events by notification type.
+- Send admin notification messages to both EMAIL and SMS handlers through separate consumer groups.
 - Format and handle email notification events with a dummy logger implementation.
 - Format and handle SMS notification events with a dummy logger implementation.
 - Persist every supported success/failure inventory notification event in `notification_records`.
@@ -30,10 +32,11 @@ Keep this document focused on notification-service only. Cross-service behavior 
 - `src/main/java/com/example/notification_service/dto/InventoryNotificationEvent.java`: Kafka event DTO consumed from inventory-service.
 - `src/main/java/com/example/notification_service/dto/InventoryReservationStatus.java`: reservation result enum with `SUCCESS` and `FAILURE`.
 - `src/main/java/com/example/notification_service/dto/NotificationType.java`: notification type enum with `EMAIL` and `SMS`.
+- `src/main/java/com/example/notification_service/kafka/AdminNotificationEventListener.java`: Kafka listener for raw admin-service messages.
 - `src/main/java/com/example/notification_service/kafka/KafkaConsumerConfig.java`: Kafka consumer factory configuration.
 - `src/main/java/com/example/notification_service/kafka/KafkaTopicConfig.java`: Kafka topic creation configuration for `inventory_notification`.
 - `src/main/java/com/example/notification_service/kafka/InventoryNotificationEventListener.java`: Kafka topic listener and event handler.
-- `src/main/java/com/example/notification_service/kafka/NotificationTopicConstant.java`: notification topic constants.
+- `src/main/java/com/example/notification_service/kafka/NotificationTopicConstant.java`: notification topic and group constants.
 - `src/main/java/com/example/notification_service/model/NotificationRecord.java`: JPA entity for persisted notification history.
 - `src/main/java/com/example/notification_service/repository/NotificationRepository.java`: Spring Data JPA repository for notification records.
 - `src/main/java/com/example/notification_service/service/NotificationService.java`: notification routing, persistence, and email/SMS handling.
@@ -47,17 +50,20 @@ Kafka bootstrap server:
 
 - `spring.kafka.bootstrap-servers=localhost:9092`
 
-Consumed topic:
+Consumed topics:
 
 - `inventory_notification`
+- `admin_notification`
 
 Topic provisioning:
 
 - `KafkaTopicConfig.inventoryNotificationTopic()` declares the topic with 1 partition and 1 replica so Spring Kafka can create it through Kafka admin when the broker allows topic creation.
 
-Consumer group:
+Consumer groups:
 
-- `notification-service`
+- `notification-service` for inventory notification events.
+- `email_group` for admin EMAIL handling.
+- `sms_group` for admin SMS handling.
 
 Consumed event payload:
 
@@ -94,6 +100,14 @@ Consumer flow:
 9. `SMS` notifications are formatted by `createSmsBody()`, saved in `notification_records`, handled by `sendSmsNotification()`, and logged.
 10. Unsupported notification types are skipped and logged.
 
+Admin notification flow:
+
+1. Admin service publishes raw text messages to topic `admin_notification`.
+2. `AdminNotificationEventListener.consumeAdminNotificationForEmailGroup()` receives each message as part of the EMAIL consumer group and calls `NotificationService.sendAdminEmailNotification()`.
+3. `AdminNotificationEventListener.consumeAdminNotificationForSmsGroup()` receives each message as part of the SMS consumer group and calls `NotificationService.sendAdminSmsNotification()`.
+4. Because admin messages are raw strings, notification-service cannot choose only EMAIL or only SMS from the payload today.
+5. If admin-service needs one-channel routing, change the admin Kafka payload to JSON with a notification type field, or split admin notifications into separate email and SMS topics.
+
 ## Database Context
 
 Database name:
@@ -121,11 +135,12 @@ Notification table columns:
 
 ## Current Behavior Notes
 
-- The service persists supported `EMAIL` and `SMS` notification records before logging the dummy send action.
-- A missing or null `notificationType` creates two persisted rows: one `EMAIL` row and one `SMS` row.
+- The service persists supported inventory `EMAIL` and `SMS` notification records before logging the dummy send action.
+- A missing or null inventory `notificationType` creates two persisted rows: one `EMAIL` row and one `SMS` row.
+- Admin notifications are logged through dummy EMAIL and SMS handlers and are not persisted in `notification_records` currently.
 - The service does not currently call external email or SMS providers.
 - `EMAIL` and `SMS` notification types both have dummy formatting and logging handlers.
-- If changing the topic name, payload fields, consumer group, serialization, table schema, or persistence behavior, update this file and coordinate with inventory-service where needed.
+- If changing the topic name, payload fields, consumer group, serialization, table schema, or persistence behavior, update this file and coordinate with inventory-service/admin-service where needed.
 
 ## Known Risks To Consider Before Changes
 
